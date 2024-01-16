@@ -3,6 +3,6 @@ mqtt_server_port: 1883
 mqtt_server_user: mqtt
 mqtt_server_password: ''
 mqtt_base_topic: weather
-owm_api_key: 1234567890abcdef
+altitude: 0
 latitude: 55.12345
 longitude: 12.34567

@@ -7,7 +7,7 @@ This script receives MQTT data and saves those to InfluxDB.
 import os
 import sys
 import re
-import datetime
+from datetime import datetime, timedelta, timezone
 import json
 import yaml
 import time
@@ -26,11 +26,20 @@ class MqttWeather():
     mqtt_server_user = ''
     mqtt_server_password = ''
     mqtt_base_topic = ''
-    owm_api_key = ''
     latitude = ''
     longitude = ''
-    api_url = r'https://api.openweathermap.org/data/2.5/onecall?lat={lat}&lon={lon}&units=metric&exclude=alerts,daily,minutely&lang=en&appid={appid}'
-    update_freq = 60*15
+    altitude = '0'
+    api_url = r'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={lat}&lon={lon}&altitude={alt}'
+    update_freq = 60*10
+
+    prop_map = {
+        'temperature': 'air_temperature',
+        'pressure': 'air_pressure_at_sea_level',
+        'humidity': 'relative_humidity',
+        'clouds': 'cloud_area_fraction',
+        'wind_speed': 'wind_speed',
+        'wind_direction': 'wind_from_direction'
+    }
     
     def __init__(self):
         logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
@@ -45,6 +54,7 @@ class MqttWeather():
         self.mqttclient = mqtt.Client()
         self.mqttclient.on_connect = self.mqtt_on_connect
         self.mqttclient.enable_logger(logging.getLogger(__name__))
+        self.mqttclient.will_set(self.state_topic, payload='{"state": "offline"}', qos=1, retain=True)
 
         #Register program end event
         atexit.register(self.programend)
@@ -57,13 +67,13 @@ class MqttWeather():
         with open(self.config_file, 'r') as f:
             config = yaml.safe_load(f)
 
-        for key in ['mqtt_base_topic', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'owm_api_key', 'latitude', 'longitude']:
+        for key in ['mqtt_base_topic', 'mqtt_server_ip', 'mqtt_server_port', 'mqtt_server_user', 'mqtt_server_password', 'altitude', 'latitude', 'longitude']:
             try:
                 self.__setattr__(key, config[key])
             except KeyError:
                 pass
 
-        self.state_topic = self.mqtt_base_topic + '/state'
+        self.state_topic = self.mqtt_base_topic + '/bridge/state'
 
     def start(self):
         logging.info('starting')
@@ -79,30 +89,32 @@ class MqttWeather():
         time.sleep(2)
         while True:
             try:
-                r = requests.get(self.api_url.format(lat=self.latitude, lon=self.longitude, appid=self.owm_api_key))
+                headers = {'user-agent': 'mqttweather'}
+                r = requests.get(self.api_url.format(lat=self.latitude, lon=self.longitude, alt=self.altitude), headers=headers)
                 data = r.json()
 
-                payload = dict((k, data['current'][k]) for k in ['temp', 'pressure', 'humidity', 'clouds', 'wind_speed'] 
-                                        if k in data['current'])
-                payload['temperature'] = payload.pop('temp')
-                self.mqttclient.publish(self.mqtt_base_topic+'/current', payload=json.dumps(payload), qos=0, retain=True)
+                now = datetime.now(timezone.utc)
 
-                now = datetime.datetime.now()
-                for i in range(1,13):
-                    pred_time = now + datetime.timedelta(hours=i)
+                data = [
+                    {
+                        'time': datetime.fromisoformat(x['time']), 
+                        **{k: x['data']['instant']['details'][v] for k, v in self.prop_map.items()}
+                    }
+                    for x in data['properties']['timeseries']]
+
+                for i in range(0,13):
+                    pred_time = now + timedelta(hours=i)
 
                     pred = None
-                    for hour in data['hourly']:
-                        dt = datetime.datetime.fromtimestamp(hour['dt'])
-                        if abs(dt - pred_time) <= datetime.timedelta(minutes=30):
-                            pred = hour
+                    for a, b in zip(data[:-1], data[1:]):
+                        if a['time'] < pred_time < b['time']:
+                            pred = {k: (a[k] + (b[k]-a[k])*(pred_time-a['time'])/(b['time']-a['time'])) for k in self.prop_map.keys()}
+                            pred = {k: round(v*10)/10 for k, v in pred.items()}
                             break
                     
                     if pred:
-                        payload = dict((k, pred[k]) for k in ['temp', 'pressure', 'humidity', 'clouds', 'wind_speed'] 
-                                                if k in pred)
-                        payload['temperature'] = payload.pop('temp')
-                        self.mqttclient.publish(self.mqtt_base_topic+'/forecast/{}h'.format(i), payload=json.dumps(payload), qos=0, retain=True)
+                        topic = self.mqtt_base_topic+('/current' if i == 0 else '/forecast/{}h'.format(i))
+                        self.mqttclient.publish(topic, payload=json.dumps(pred), qos=0, retain=True)
 
             except Exception as e:
                 logging.error(e)
@@ -112,6 +124,7 @@ class MqttWeather():
     def programend(self):
         logging.info('stopping')
 
+        self.mqttclient.publish(self.state_topic, payload='{"state": "offline"}', qos=1, retain=True)
         self.mqttclient.disconnect()
         time.sleep(0.5)
         logging.info('stopped')
@@ -120,8 +133,7 @@ class MqttWeather():
         try:
             logging.info('MQTT client connected with result code: '+mqtt.connack_string(rc))
 
-            self.mqttclient.publish(self.mqtt_base_topic+'/bridge/state', payload='{"state": "online"}', qos=1, retain=True)
-            self.mqttclient.will_set(self.mqtt_base_topic+'/bridge/state', payload='{"state": "offline"}', qos=1, retain=True)
+            self.mqttclient.publish(self.state_topic, payload='{"state": "online"}', qos=1, retain=True)
         except Exception as e:
             logging.error('Encountered error in mqtt connect handler: '+str(e))
 
