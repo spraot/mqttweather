@@ -102,7 +102,7 @@ class MqttWeather():
                     }
                     for x in data['properties']['timeseries']]
 
-                for i in range(0,13):
+                for i in range(0,19):
                     pred_time = now + timedelta(hours=i)
 
                     pred = None
