@@ -99,7 +99,7 @@ class MqttWeather():
                 data = [
                     {
                         'time': datetime.fromisoformat(x['time']), 
-                        **{k: x['data']['instant']['details'][v] for k, v in self.prop_map.items()}
+                        **x['data']['instant']['details']
                     }
                     for x in data['properties']['timeseries']]
 
@@ -109,7 +109,7 @@ class MqttWeather():
                     pred = None
                     for a, b in zip(data[:-1], data[1:]):
                         if a['time'] < pred_time < b['time']:
-                            pred = {k: (a[k] + (b[k]-a[k])*(pred_time-a['time'])/(b['time']-a['time'])) for k in self.prop_map.keys()}
+                            pred = {k: (a[v] + (b[v]-a[v])*(pred_time-a['time'])/(b['time']-a['time'])) for k, v in self.prop_map.items() if v in a and v in b}
                             pred = {k: round(v*10)/10 for k, v in pred.items()}
                             break
                     
