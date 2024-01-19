@@ -29,7 +29,7 @@ class MqttWeather():
     latitude = ''
     longitude = ''
     altitude = '0'
-    api_url = r'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={lat}&lon={lon}&altitude={alt}'
+    api_url = r'https://api.met.no/weatherapi/locationforecast/2.0/complete?lat={lat}&lon={lon}&altitude={alt}'
     update_freq = 60*10
 
     prop_map = {
@@ -38,7 +38,8 @@ class MqttWeather():
         'humidity': 'relative_humidity',
         'clouds': 'cloud_area_fraction',
         'wind_speed': 'wind_speed',
-        'wind_direction': 'wind_from_direction'
+        'wind_direction': 'wind_from_direction',
+        'ultraviolet_index_clear_sky': 'ultraviolet_index_clear_sky',
     }
     
     def __init__(self):
