@@ -101,7 +101,7 @@ class MqttWeather():
                     {
                         'time': datetime.fromisoformat(x['time']), 
                         **x['data']['instant']['details'],
-                        **x['data']['next_1_hours']['details']
+                        **(x['data']['next_1_hours']['details'] if 'next_1_hours' in x['data'] else {}),
                     }
                     for x in data['properties']['timeseries']]
 
@@ -131,7 +131,7 @@ class MqttWeather():
                         'air_temperature_maximum': max(x['air_temperature'] for x in pred_range),
                         'ultraviolet_index_actual_average': sum((100-x['cloud_area_fraction'])*x['ultraviolet_index_clear_sky'] for x in pred_range)/len(pred_range),
                         'wind_speed_max': max(x['wind_speed'] for x in pred_range),
-                        'precipitation_amount': sum(x['precipitation_amount'] for x in pred_range),
+                        'precipitation_amount': sum(x['precipitation_amount'] for x in pred_range if 'precipitation_amount' in x),
                     }
                     pred['ultraviolet_index_actual_average'] = round(pred['ultraviolet_index_actual_average']*10)/10
                     topic = self.mqtt_base_topic+'/forecast/'+title
