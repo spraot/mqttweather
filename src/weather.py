@@ -127,8 +127,8 @@ class MqttWeather():
                 for s, e, title in (now, end_of_day, 'today'), (end_of_day, end_of_day + timedelta(days=1), 'tomorrow'):
                     pred_range = [x for x in data if s <= x['time'] < e]
                     pred = {
-                        'air_temperature_minimum': min(x['air_temperature'] for x in pred_range),
-                        'air_temperature_maximum': max(x['air_temperature'] for x in pred_range),
+                        'temperature_minimum': min(x[self.prop_map['temperature']] for x in pred_range),
+                        'temperature_maximum': max(x[self.prop_map['temperature']] for x in pred_range),
                         'ultraviolet_index_actual_average': sum((100-x['cloud_area_fraction'])*x['ultraviolet_index_clear_sky'] for x in pred_range)/len(pred_range),
                         'wind_speed_max': max(x['wind_speed'] for x in pred_range),
                         'precipitation_amount': sum(x['precipitation_amount'] for x in pred_range if 'precipitation_amount' in x),
