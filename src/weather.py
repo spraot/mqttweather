@@ -8,6 +8,7 @@ import os
 import sys
 import re
 from datetime import datetime, timedelta, timezone
+from tzlocal import get_localzone
 import json
 import yaml
 import time
@@ -99,7 +100,8 @@ class MqttWeather():
                 data = [
                     {
                         'time': datetime.fromisoformat(x['time']), 
-                        **x['data']['instant']['details']
+                        **x['data']['instant']['details'],
+                        **x['data']['next_1_hours']['details']
                     }
                     for x in data['properties']['timeseries']]
 
@@ -109,13 +111,31 @@ class MqttWeather():
                     pred = None
                     for a, b in zip(data[:-1], data[1:]):
                         if a['time'] < pred_time < b['time']:
+                            # Interpolate to find exact forecast for pred_time
                             pred = {k: (a[v] + (b[v]-a[v])*(pred_time-a['time'])/(b['time']-a['time'])) for k, v in self.prop_map.items() if v in a and v in b}
+                            # Significant digits, round to nearest 0.1
                             pred = {k: round(v*10)/10 for k, v in pred.items()}
                             break
                     
                     if pred:
                         topic = self.mqtt_base_topic+('/current' if i == 0 else '/forecast/{}h'.format(i))
                         self.mqttclient.publish(topic, payload=json.dumps(pred), qos=0, retain=True)
+
+                # Aggregate forecasts for today and for tomorrow
+                now_local = now.astimezone(get_localzone())
+                end_of_day = datetime(now_local.year, now_local.month, now_local.day, 0, 0, 0, tzinfo=get_localzone()) + timedelta(days=1)
+                for s, e, title in (now, end_of_day, 'today'), (end_of_day, end_of_day + timedelta(days=1), 'tomorrow'):
+                    pred_range = [x for x in data if s <= x['time'] < e]
+                    pred = {
+                        'air_temperature_minimum': min(x['air_temperature'] for x in pred_range),
+                        'air_temperature_maximum': max(x['air_temperature'] for x in pred_range),
+                        'ultraviolet_index_actual_average': sum((100-x['cloud_area_fraction'])*x['ultraviolet_index_clear_sky'] for x in pred_range)/len(pred_range),
+                        'wind_speed_max': max(x['wind_speed'] for x in pred_range),
+                        'precipitation_amount': sum(x['precipitation_amount'] for x in pred_range),
+                    }
+                    pred['ultraviolet_index_actual_average'] = round(pred['ultraviolet_index_actual_average']*10)/10
+                    topic = self.mqtt_base_topic+'/forecast/'+title
+                    self.mqttclient.publish(topic, payload=json.dumps(pred), qos=0, retain=True)
 
             except Exception as e:
                 logging.error(e)
