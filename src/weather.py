@@ -129,11 +129,11 @@ class MqttWeather():
                     pred = {
                         'temperature_minimum': min(x[self.prop_map['temperature']] for x in pred_range),
                         'temperature_maximum': max(x[self.prop_map['temperature']] for x in pred_range),
-                        'ultraviolet_index_actual_average': sum(0.01*(100-x['cloud_area_fraction'])*x['ultraviolet_index_clear_sky'] for x in pred_range)/len(pred_range),
+                        'ultraviolet_index_actual_average': sum(0.01*(100-x[self.prop_map['clouds']])*x['ultraviolet_index_clear_sky'] for x in pred_range)/len(pred_range),
                         'wind_speed_max': max(x['wind_speed'] for x in pred_range),
                         'precipitation_amount': sum(x['precipitation_amount'] for x in pred_range if 'precipitation_amount' in x),
                     }
-                    pred['ultraviolet_index_actual_average'] = round(pred['ultraviolet_index_actual_average']*10)/10
+                    pred['ultraviolet_index_actual_average'] = round(pred['ultraviolet_index_actual_average']*100)/100
                     topic = self.mqtt_base_topic+'/forecast/'+title
                     self.mqttclient.publish(topic, payload=json.dumps(pred), qos=0, retain=True)
 
