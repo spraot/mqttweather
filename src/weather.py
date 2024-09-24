@@ -126,6 +126,9 @@ class MqttWeather():
                 end_of_day = datetime(now_local.year, now_local.month, now_local.day, 0, 0, 0, tzinfo=get_localzone()) + timedelta(days=1)
                 for s, e, title in (now, end_of_day, 'today'), (end_of_day, end_of_day + timedelta(days=1), 'tomorrow'):
                     pred_range = [x for x in data if s <= x['time'] < e]
+                    if len(pred_range) == 0:
+                        logging.error('No prediction data for '+title)
+                        continue
                     pred = {
                         'temperature_minimum': min(x[self.prop_map['temperature']] for x in pred_range),
                         'temperature_maximum': max(x[self.prop_map['temperature']] for x in pred_range),
