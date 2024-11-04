@@ -138,6 +138,7 @@ class MqttWeather():
                         'wind_speed': round(mean(x['wind_speed'] for x in pred_range)*10)/10,
                         'wind_speed_max': max(x['wind_speed'] for x in pred_range),
                         'precipitation_amount': sum(x['precipitation_amount'] for x in pred_range if 'precipitation_amount' in x),
+                        'humidity': round(mean(x[self.prop_map['humidity']] for x in pred_range)),
                     }
                     pred['ultraviolet_index_actual_average'] = round(pred['ultraviolet_index_actual_average']*100)/100
                     topic = self.mqtt_base_topic+'/forecast/'+title
