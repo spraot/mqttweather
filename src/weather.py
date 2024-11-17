@@ -7,16 +7,13 @@ This script receives MQTT data and saves those to InfluxDB.
 import os
 from statistics import mean
 import sys
-import re
 from datetime import datetime, timedelta, timezone
 from tzlocal import get_localzone
 import json
 import yaml
 import time
-from typing import NamedTuple
 import logging
 from pythonjsonlogger import jsonlogger
-import numbers
 import atexit
 import paho.mqtt.client as mqtt
 import requests
@@ -60,7 +57,7 @@ class MqttWeather():
         self.load_config()
         
         #MQTT init
-        self.mqttclient = mqtt.Client()
+        self.mqttclient = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
         self.mqttclient.on_connect = self.mqtt_on_connect
         self.mqttclient.enable_logger(logger)
         self.mqttclient.will_set(self.state_topic, payload='{"state": "offline"}', qos=1, retain=True)
