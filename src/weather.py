@@ -15,11 +15,18 @@ import yaml
 import time
 from typing import NamedTuple
 import logging
+from pythonjsonlogger import jsonlogger
 import numbers
 import atexit
 import paho.mqtt.client as mqtt
 import requests
 
+logger = logging.getLogger()
+logHandler = logging.StreamHandler()
+formatter = jsonlogger.JsonFormatter('%(message)%(levelname)', timestamp='dt')
+logHandler.setFormatter(formatter)
+logger.addHandler(logHandler)
+logger.setLevel(os.environ.get('LOGLEVEL', 'INFO'))
 
 class MqttWeather():
     config_file = 'config.yml'
@@ -45,8 +52,7 @@ class MqttWeather():
     }
     
     def __init__(self):
-        logging.basicConfig(level=os.environ.get('LOGLEVEL', 'INFO'), format='%(asctime)s;<%(levelname)s>;%(message)s')
-        logging.info('Init')
+        logger.info('Init')
 
         if len(sys.argv) > 1:
             self.config_file = sys.argv[1]
@@ -56,16 +62,16 @@ class MqttWeather():
         #MQTT init
         self.mqttclient = mqtt.Client()
         self.mqttclient.on_connect = self.mqtt_on_connect
-        self.mqttclient.enable_logger(logging.getLogger(__name__))
+        self.mqttclient.enable_logger(logger)
         self.mqttclient.will_set(self.state_topic, payload='{"state": "offline"}', qos=1, retain=True)
 
         #Register program end event
         atexit.register(self.programend)
 
-        logging.info('init done')
+        logger.info('init done')
 
     def load_config(self):
-        logging.info('Reading config from '+self.config_file)
+        logger.info('Reading config from '+self.config_file)
 
         with open(self.config_file, 'r') as f:
             config = yaml.safe_load(f)
@@ -79,13 +85,13 @@ class MqttWeather():
         self.state_topic = self.mqtt_base_topic + '/bridge/state'
 
     def start(self):
-        logging.info('starting')
+        logger.info('starting')
 
         #MQTT startup
-        logging.info('Starting MQTT client')
+        logger.info('Starting MQTT client')
         self.mqttclient.username_pw_set(self.mqtt_server_user, password=self.mqtt_server_password)
         self.mqttclient.connect(self.mqtt_server_ip, self.mqtt_server_port, 60)
-        logging.info('MQTT client started')
+        logger.info('MQTT client started')
 
         self.mqttclient.loop_start()
 
@@ -128,7 +134,7 @@ class MqttWeather():
                 for s, e, title in (now, end_of_day, 'today'), (end_of_day, end_of_day + timedelta(days=1), 'tomorrow'):
                     pred_range = [x for x in data if s <= x['time'] < e]
                     if len(pred_range) == 0:
-                        logging.error('No prediction data for '+title)
+                        logger.error('No prediction data for '+title)
                         continue
                     pred = {
                         'temperature_minimum': min(x[self.prop_map['temperature']] for x in pred_range),
@@ -145,25 +151,25 @@ class MqttWeather():
                     self.mqttclient.publish(topic, payload=json.dumps(pred), qos=0, retain=True)
 
             except Exception as e:
-                logging.error(e)
+                logger.error(e)
 
             time.sleep(self.update_freq)
 
     def programend(self):
-        logging.info('stopping')
+        logger.info('stopping')
 
         self.mqttclient.publish(self.state_topic, payload='{"state": "offline"}', qos=1, retain=True)
         self.mqttclient.disconnect()
         time.sleep(0.5)
-        logging.info('stopped')
+        logger.info('stopped')
 
     def mqtt_on_connect(self, client, userdata, flags, rc):
         try:
-            logging.info('MQTT client connected with result code: '+mqtt.connack_string(rc))
+            logger.info('MQTT client connected with result code: '+mqtt.connack_string(rc))
 
             self.mqttclient.publish(self.state_topic, payload='{"state": "online"}', qos=1, retain=True)
         except Exception as e:
-            logging.error('Encountered error in mqtt connect handler: '+str(e))
+            logger.error('Encountered error in mqtt connect handler: '+str(e))
 
 if __name__ == '__main__':
     mqttWeather =  MqttWeather()
